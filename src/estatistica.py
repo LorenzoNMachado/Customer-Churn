@@ -1,21 +1,41 @@
-"""Funções de estatística descritiva usadas no notebook de churn."""
+"""Funções de estatística descritiva e inferencial usadas no notebook de churn."""
 import math
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 
-def calcular_classes(dados):
-    """Bordas dos intervalos de classe pela regra de Sturges."""
+def calcular_classes(dados, largura=None):
+    """Bordas dos intervalos de classe.
+
+    Sem `largura`, usa a regra de Sturges. Com `largura`, cria classes de
+    tamanho fixo a partir do mínimo (útil para variáveis discretas, como meses).
+    """
     dados = dados.dropna()
-    n = len(dados)
-    k = math.ceil(1 + 3.322 * math.log10(n))
-    h = (dados.max() - dados.min()) / k
-    bins = [dados.min() + i * h for i in range(k + 1)]
+    if largura is None:
+        k = math.ceil(1 + 3.322 * math.log10(len(dados)))
+        largura = (dados.max() - dados.min()) / k
+    else:
+        k = math.ceil((dados.max() - dados.min()) / largura)
+    bins = [dados.min() + i * largura for i in range(k + 1)]
     # Com right=False o último intervalo é aberto à direita; estende a borda
     # para incluir o valor máximo
-    bins[-1] = np.nextafter(dados.max(), np.inf)
+    if bins[-1] <= dados.max():
+        bins[-1] = np.nextafter(dados.max(), np.inf)
     return bins
+
+
+def _rotulo(intervalo):
+    # Bordas inteiras dispensam casas decimais (ex.: "0 |--- 6")
+    fmt = '{:,.0f}' if all(round(b, 6) == round(b) for b in (intervalo.left, intervalo.right)) else '{:,.2f}'
+    return f"{fmt.format(intervalo.left)} |--- {fmt.format(intervalo.right)}"
+
+
+def classificar(dados, largura=None):
+    """Classe de cada valor, com rótulos no formato "a |--- b"."""
+    classes = pd.cut(dados, bins=calcular_classes(dados, largura), right=False)
+    return classes.cat.rename_categories([_rotulo(c) for c in classes.cat.categories])
 
 
 def _completar_frequencias(tabela, n):
@@ -27,17 +47,16 @@ def _completar_frequencias(tabela, n):
     return tabela
 
 
-def criar_tabela_frequencia(df, coluna):
+def criar_tabela_frequencia(df, coluna, largura=None):
     """Distribuição de frequência com intervalos de classe (variável numérica)."""
     dados = df[coluna].dropna()
-    classes = pd.cut(dados, bins=calcular_classes(dados), right=False)
+    classes = pd.cut(dados, bins=calcular_classes(dados, largura), right=False)
     fi = classes.value_counts().sort_index()
 
     tabela = pd.DataFrame({
         'Ponto Médio (xi)': [(c.left + c.right) / 2 for c in fi.index],
         'Frequência Absoluta (fi)': fi.values,
-    }, index=pd.Index([f"{c.left:,.2f} |--- {c.right:,.2f}" for c in fi.index],
-                      name=f'Classes ({coluna})'))
+    }, index=pd.Index([_rotulo(c) for c in fi.index], name=f'Classes ({coluna})'))
     return _completar_frequencias(tabela, len(dados))
 
 
@@ -48,6 +67,14 @@ def criar_tabela_frequencia_categorica(df, coluna):
     tabela = pd.DataFrame({'Frequência Absoluta (fi)': fi.values},
                           index=pd.Index(fi.index, name=coluna))
     return _completar_frequencias(tabela, len(dados))
+
+
+def resumo_categoricas(df, colunas):
+    """Uma única tabela com fi e Fr (%) de cada categoria de várias variáveis."""
+    partes = {c: criar_tabela_frequencia_categorica(df, c)[['Frequência Absoluta (fi)', 'Fr (%)']]
+              for c in colunas}
+    tabela = pd.concat(partes, names=['Variável', 'Categoria'])
+    return tabela
 
 
 def formatar_tabela(tabela):
@@ -61,14 +88,29 @@ def formatar_tabela(tabela):
     return tabela.style.format({c: f for c, f in formatos.items() if c in tabela.columns})
 
 
-def medidas_resumo(dados):
+def moda_czuber(dados, largura=None):
+    """Classe modal e moda pela fórmula de Czuber: Mo = li + d1 / (d1 + d2) * h."""
+    dados = dados.dropna()
+    bins = calcular_classes(dados, largura)
+    fi = pd.cut(dados, bins=bins, right=False).value_counts().sort_index().to_numpy()
+    i = int(fi.argmax())
+    anterior = fi[i - 1] if i > 0 else 0
+    posterior = fi[i + 1] if i < len(fi) - 1 else 0
+    d1, d2 = fi[i] - anterior, fi[i] - posterior
+    h = bins[i + 1] - bins[i]
+    moda = bins[i] + d1 / (d1 + d2) * h if d1 + d2 else bins[i] + h / 2
+    return pd.Interval(bins[i], bins[i + 1], closed='left'), moda
+
+
+def medidas_resumo(dados, largura=None):
     """Medidas de posição e dispersão de uma variável numérica."""
     dados = dados.dropna()
     q1, q3 = dados.quantile([0.25, 0.75])
+    _, moda = moda_czuber(dados, largura)
     return pd.Series({
         'Média': dados.mean(),
         'Mediana': dados.median(),
-        'Moda': dados.mode().iloc[0],
+        'Moda (Czuber)': moda,
         'Desvio Padrão': dados.std(),
         'Coef. Variação (%)': dados.std() / dados.mean() * 100,
         'Mínimo': dados.min(),
@@ -86,3 +128,23 @@ def taxa_churn(df, coluna, alvo='Churn'):
         'Churn (%)': df.groupby(coluna, observed=True)[alvo].apply(lambda s: (s == 'Yes').mean() * 100),
     })
     return tabela.sort_values('Churn (%)', ascending=False)
+
+
+def teste_qui_quadrado(df, coluna, alvo='Churn'):
+    """Qui-quadrado de independência entre `coluna` e o alvo, com V de Cramér."""
+    contingencia = pd.crosstab(df[coluna], df[alvo])
+    qui2, p, gl, _ = stats.chi2_contingency(contingencia)
+    n = contingencia.to_numpy().sum()
+    v_cramer = math.sqrt(qui2 / (n * (min(contingencia.shape) - 1)))
+    return pd.Series({'Qui-quadrado': qui2, 'gl': gl, 'p-valor': p, 'V de Cramér': v_cramer})
+
+
+def teste_mann_whitney(df, coluna, alvo='Churn'):
+    """Mann-Whitney entre quem saiu e quem ficou, com correlação rank-biserial."""
+    saiu = df.loc[df[alvo] == 'Yes', coluna].dropna()
+    ficou = df.loc[df[alvo] == 'No', coluna].dropna()
+    u, p = stats.mannwhitneyu(saiu, ficou, alternative='two-sided')
+    # Positivo: quem saiu tende a ter valores maiores
+    rank_biserial = 2 * u / (len(saiu) * len(ficou)) - 1
+    return pd.Series({'Mediana (saiu)': saiu.median(), 'Mediana (ficou)': ficou.median(),
+                      'U': u, 'p-valor': p, 'Rank-biserial': rank_biserial})

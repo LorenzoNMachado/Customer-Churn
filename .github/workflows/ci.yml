@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Instala dependências
+        run: pip install -r requirements.txt pytest
+      - name: Testes
+        run: pytest
+      - name: Executa o notebook do início ao fim
+        run: jupyter nbconvert --to notebook --execute notebooks/analise_churn.ipynb --output-dir /tmp/nb
