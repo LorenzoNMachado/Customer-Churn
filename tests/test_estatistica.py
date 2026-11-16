@@ -4,8 +4,9 @@ import pandas as pd
 import pytest
 
 from estatistica import (calcular_classes, classificar, criar_tabela_frequencia,
-                         criar_tabela_frequencia_categorica, medidas_resumo, moda_czuber,
-                         resumo_categoricas, taxa_churn, teste_mann_whitney,
+                         criar_tabela_frequencia_categorica, intervalo_wilson, kaplan_meier,
+                         mediana_sobrevivencia, medidas_resumo, moda_czuber,
+                         resumo_categoricas, taxa_churn, teste_log_rank, teste_mann_whitney,
                          teste_qui_quadrado)
 
 
@@ -98,3 +99,47 @@ def test_qui_quadrado_independencia_perfeita():
 def test_mann_whitney_sinal(df):
     # Quem saiu tem tenure menor -> rank-biserial negativo
     assert teste_mann_whitney(df, 'tenure')['Rank-biserial'] < 0
+
+
+def test_intervalo_wilson():
+    # 5 de 10: p = 0,5 com meia-largura 1,96 * sqrt(0,025 + 0,0096) / 1,384
+    baixo, alto = intervalo_wilson(5, 10)
+    assert baixo == pytest.approx(0.2366, abs=1e-4)
+    assert alto == pytest.approx(0.7634, abs=1e-4)
+
+
+def test_taxa_churn_tem_ic_em_volta_da_taxa(df):
+    tabela = taxa_churn(df, 'plano')
+    assert (tabela['IC 95% inf (%)'] <= tabela['Churn (%)']).all()
+    assert (tabela['Churn (%)'] <= tabela['IC 95% sup (%)']).all()
+
+
+def test_kaplan_meier_exemplo_de_livro():
+    # Tempos 1, 2, 2+, 3, 4+ (+ = censurado):
+    # S(1) = 4/5, S(2) = 4/5 * 3/4, S(3) = 0,6 * 1/2
+    curva = kaplan_meier([1, 2, 2, 3, 4], [True, True, False, True, False])
+    assert curva['Sobrevivência'].tolist() == pytest.approx([1, 0.8, 0.6, 0.3])
+    assert curva.loc[2, 'Em risco'] == 4
+    assert mediana_sobrevivencia(curva) == 3
+
+
+def test_kaplan_meier_sem_eventos_nao_atinge_mediana():
+    curva = kaplan_meier([1, 2, 3], [False, False, False])
+    assert curva['Sobrevivência'].tolist() == [1.0]
+    assert math.isnan(mediana_sobrevivencia(curva))
+
+
+def test_log_rank_grupos_iguais():
+    tempo = [1, 2, 3, 4, 5] * 2
+    evento = [True, False, True, True, False] * 2
+    resultado = teste_log_rank(tempo, evento, ['a'] * 5 + ['b'] * 5)
+    assert resultado['Qui-quadrado'] == pytest.approx(0)
+    assert resultado['p-valor'] == pytest.approx(1)
+
+
+def test_log_rank_grupos_diferentes():
+    tempo = list(range(1, 21)) * 2
+    evento = [True] * 40
+    grupo = ['curto'] * 20 + ['longo'] * 20
+    tempo = [t if g == 'curto' else t + 20 for t, g in zip(tempo, grupo)]
+    assert teste_log_rank(tempo, evento, grupo)['p-valor'] < 0.001

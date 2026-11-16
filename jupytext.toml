@@ -1,0 +1,2 @@
+# Pareia cada notebook com um .py (formato percent) para diffs legíveis no git
+formats = "ipynb,py:percent"

@@ -121,11 +121,23 @@ def medidas_resumo(dados, largura=None):
     })
 
 
+def intervalo_wilson(sucessos, n, confianca=0.95):
+    """Intervalo de confiança de Wilson para uma proporção."""
+    ic = stats.binomtest(int(sucessos), int(n)).proportion_ci(confianca, method='wilson')
+    return ic.low, ic.high
+
+
 def taxa_churn(df, coluna, alvo='Churn'):
-    """Quantidade de clientes e % de churn em cada categoria de `coluna`."""
+    """Clientes, % de churn e IC 95% (Wilson) em cada categoria de `coluna`."""
+    grupos = df.groupby(coluna, observed=True)[alvo]
+    clientes = grupos.size()
+    saidas = grupos.apply(lambda s: (s == 'Yes').sum())
+    ic = [intervalo_wilson(k, n) for k, n in zip(saidas, clientes)]
     tabela = pd.DataFrame({
-        'Clientes': df.groupby(coluna, observed=True)[alvo].size(),
-        'Churn (%)': df.groupby(coluna, observed=True)[alvo].apply(lambda s: (s == 'Yes').mean() * 100),
+        'Clientes': clientes,
+        'Churn (%)': saidas / clientes * 100,
+        'IC 95% inf (%)': [baixo * 100 for baixo, _ in ic],
+        'IC 95% sup (%)': [alto * 100 for _, alto in ic],
     })
     return tabela.sort_values('Churn (%)', ascending=False)
 
@@ -148,3 +160,50 @@ def teste_mann_whitney(df, coluna, alvo='Churn'):
     rank_biserial = 2 * u / (len(saiu) * len(ficou)) - 1
     return pd.Series({'Mediana (saiu)': saiu.median(), 'Mediana (ficou)': ficou.median(),
                       'U': u, 'p-valor': p, 'Rank-biserial': rank_biserial})
+
+
+def kaplan_meier(tempo, evento):
+    """Curva de sobrevivência de Kaplan-Meier.
+
+    `tempo` é o tempo observado e `evento` indica se o evento (churn) ocorreu;
+    quando não ocorreu, a observação é censurada naquele tempo.
+    """
+    tempo = np.asarray(tempo)
+    evento = np.asarray(evento, dtype=bool)
+    linhas = [(0, len(tempo), 0, 1.0)]
+    s = 1.0
+    for t in np.unique(tempo[evento]):
+        em_risco = (tempo >= t).sum()
+        eventos = (evento & (tempo == t)).sum()
+        s *= 1 - eventos / em_risco
+        linhas.append((t, em_risco, eventos, s))
+    curva = pd.DataFrame(linhas, columns=['Tempo', 'Em risco', 'Eventos', 'Sobrevivência']).set_index('Tempo')
+    return curva[~curva.index.duplicated(keep='last')]
+
+
+def mediana_sobrevivencia(curva):
+    """Primeiro tempo em que a sobrevivência chega a 50% (NaN se não chegar)."""
+    abaixo = curva.index[curva['Sobrevivência'] <= 0.5]
+    return abaixo[0] if len(abaixo) else np.nan
+
+
+def teste_log_rank(tempo, evento, grupo):
+    """Teste log-rank para comparar curvas de sobrevivência de k grupos."""
+    tempo, grupo = np.asarray(tempo), np.asarray(grupo)
+    evento = np.asarray(evento, dtype=bool)
+    grupos = pd.unique(grupo)
+    k = len(grupos)
+    observados, esperados, variancia = np.zeros(k), np.zeros(k), np.zeros((k, k))
+    for t in np.unique(tempo[evento]):
+        em_risco = tempo >= t
+        n_j = np.array([(em_risco & (grupo == g)).sum() for g in grupos])
+        d_j = np.array([(evento & (tempo == t) & (grupo == g)).sum() for g in grupos])
+        n, d = n_j.sum(), d_j.sum()
+        observados += d_j
+        esperados += d * n_j / n
+        if n > 1:
+            variancia += d * (n - d) / (n - 1) * (np.diag(n_j / n) - np.outer(n_j, n_j) / n ** 2)
+    # Um grupo é redundante: os desvios somam zero
+    desvio = (observados - esperados)[:-1]
+    qui2 = float(desvio @ np.linalg.solve(variancia[:-1, :-1], desvio))
+    return pd.Series({'Qui-quadrado': qui2, 'gl': k - 1, 'p-valor': stats.chi2.sf(qui2, k - 1)})
