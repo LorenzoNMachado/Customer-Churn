@@ -8,7 +8,13 @@ Análise estatística, análise de sobrevivência e modelos de previsão para en
 
 **Dataset:** [Telco Customer Churn (Kaggle, blastchar)](https://www.kaggle.com/datasets/blastchar/telco-customer-churn): 7.043 clientes e 21 colunas. A taxa de churn é de 26,5%.
 
-O CSV está versionado em `data/`. Os metadados do Kaggle identificam os arquivos como “Data files © Original Authors”; a licença MIT deste repositório cobre somente o código original. Consulte [Dados e licenças](DATA_SOURCES.md) antes de redistribuir o dataset ou resultados derivados.
+O CSV está versionado atualmente em `data/`, mas sua autorização de
+redistribuição pública não foi confirmada. O Kaggle identifica os dados como
+“Data files © Original Authors”; a licença MIT deste repositório cobre somente
+o material original do autor. O arquivo foi preservado até autorização do
+proprietário para removê-lo. Consulte [Dados e licenças](DATA_SOURCES.md) para
+a comparação de proveniência e para obter a versão fixada diretamente do
+Kaggle após a remoção.
 
 ![Curva de sobrevivência por tipo de contrato](reports/figures/sobrevivencia_por_contrato.png)
 
