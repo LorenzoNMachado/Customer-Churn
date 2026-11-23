@@ -5,12 +5,22 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   testes:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
           cache: pip
@@ -18,5 +28,7 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: Testes
         run: pytest
+      - name: Confere o pareamento do notebook
+        run: jupytext --test-strict --to py:percent notebooks/analise_churn.ipynb
       - name: Executa o notebook do início ao fim
         run: jupyter nbconvert --to notebook --execute notebooks/analise_churn.ipynb --output-dir /tmp/nb
