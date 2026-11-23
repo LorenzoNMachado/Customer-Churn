@@ -30,5 +30,21 @@ jobs:
         run: pytest
       - name: Confere o pareamento do notebook
         run: jupytext --test --to py:percent notebooks/analise_churn.ipynb
+      - name: Baixa e verifica o dataset original
+        id: dataset
+        shell: bash
+        run: |
+          if python scripts/download_dataset.py; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            result=$?
+            if [ "$result" -eq 3 ]; then
+              echo "available=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Kaggle download is unavailable. The notebook run is skipped. Download the CSV manually to reproduce it locally."
+            else
+              exit "$result"
+            fi
+          fi
       - name: Executa o notebook do início ao fim
+        if: steps.dataset.outputs.available == 'true'
         run: jupyter nbconvert --to notebook --execute notebooks/analise_churn.ipynb --output-dir /tmp/nb
