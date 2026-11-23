@@ -2,3 +2,7 @@
 __pycache__/
 .venv/
 venv/
+.env
+.env.*
+!.env.example
+data/WA_Fn-UseC_-Telco-Customer-Churn.csv

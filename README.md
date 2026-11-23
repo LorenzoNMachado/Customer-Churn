@@ -1,10 +1,26 @@
 ﻿# Customer Churn — Telco
 
 [![CI](https://github.com/LorenzoNMachado/Customer-Churn/actions/workflows/ci.yml/badge.svg)](https://github.com/LorenzoNMachado/Customer-Churn/actions/workflows/ci.yml)
+[![License: MIT (code)](https://img.shields.io/badge/license-MIT%20(code)-green.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](SECURITY.md)
 
 Análise estatística, análise de sobrevivência e modelos de previsão para entender quais clientes de uma operadora de telecom cancelam o serviço (churn) e quando.
 
-**Dataset:** [Telco Customer Churn (Kaggle, blastchar)](https://www.kaggle.com/datasets/blastchar/telco-customer-churn): 7.043 clientes e 21 colunas. A taxa de churn é de 26,5%.
+**Dataset:** Telco Customer Churn, com 7.043 clientes e 21 colunas. A taxa de churn é de 26,5%. O arquivo de dados não é distribuído neste repositório.
+
+## Obtenção do dataset
+
+O dataset Telco Customer Churn não é distribuído neste repositório. Para reproduzir as análises, obtenha o arquivo diretamente na [página original do Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn).
+
+Salve `WA_Fn-UseC_-Telco-Customer-Churn.csv` na pasta `data/`, ou utilize o script de download e verificação disponibilizado pelo projeto:
+
+```bash
+python scripts/download_dataset.py
+```
+
+O script baixa a versão consultada do Kaggle e verifica o SHA-256, o cabeçalho das 21 colunas e os 7.043 registros. Ele não exige credenciais embutidas no código e não sobrescreve um arquivo existente sem `--force`. Se o download automatizado não funcionar, baixe o CSV pela página do Kaggle e salve-o no caminho indicado. O arquivo é ignorado pelo Git.
+
+O CSV foi removido da versão atual do repositório. Cópias permanecem em commits históricos. Consulte [Dados e licenças](DATA_SOURCES.md) para proveniência e limites de redistribuição.
 
 ![Curva de sobrevivência por tipo de contrato](reports/figures/sobrevivencia_por_contrato.png)
 
@@ -29,7 +45,7 @@ Análise estatística, análise de sobrevivência e modelos de previsão para en
 ## Estrutura
 
 ```
-data/              WA_Fn-UseC_-Telco-Customer-Churn.csv
+data/              dataset obtido localmente (não versionado)
 notebooks/         analise_churn.ipynb (com saídas) e analise_churn.py (par do jupytext)
 src/estatistica.py tabelas de frequência, medidas, testes, Kaplan-Meier e log-rank
 src/modelagem.py   variáveis derivadas e explicação das previsões
@@ -48,9 +64,15 @@ pip install -r requirements.txt
 jupyter notebook notebooks/analise_churn.ipynb
 ```
 
-- **Testes:** `pip install pytest` e depois `pytest`. A cada push, o GitHub Actions roda os testes e executa o notebook inteiro.
+- **Testes:** `pip install -r requirements.txt` e depois `pytest`. A cada push, o GitHub Actions roda os testes, confere o pareamento Jupytext e tenta baixar e verificar o dataset antes de executar o notebook. Se o endpoint do Kaggle estiver indisponível, os testes independentes continuam e o CI informa que a execução integral do notebook foi ignorada. Erros de integridade falham o workflow.
 - **Diffs legíveis:** o notebook é pareado com `notebooks/analise_churn.py` pelo [jupytext](https://jupytext.readthedocs.io). Com o jupytext instalado, o Jupyter atualiza os dois arquivos ao salvar. Fora do Jupyter, rode `jupytext --sync notebooks/analise_churn.ipynb`. Para revisar mudanças, olhe o diff do `.py`.
 - **Dependências:** o Dependabot abre um PR quando sai uma nova versão de alguma biblioteca fixada.
+
+## Licença e segurança
+
+O código original está sob a [licença MIT](LICENSE). O dataset e seus direitos
+permanecem separados. A política para relatos privados está em
+[`SECURITY.md`](SECURITY.md); apenas a branch `main` é mantida.
 
 ## O que o notebook faz
 
