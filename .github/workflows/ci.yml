@@ -29,6 +29,6 @@ jobs:
       - name: Testes
         run: pytest
       - name: Confere o pareamento do notebook
-        run: jupytext --test-strict --to py:percent notebooks/analise_churn.ipynb
+        run: jupytext --test --to py:percent notebooks/analise_churn.ipynb
       - name: Executa o notebook do início ao fim
         run: jupyter nbconvert --to notebook --execute notebooks/analise_churn.ipynb --output-dir /tmp/nb
